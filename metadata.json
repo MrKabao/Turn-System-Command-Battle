@@ -1,0 +1,6 @@
+{
+  "name": "ターン制コマンドバトル",
+  "description": "物理攻撃、魔法攻撃、防御のコマンドを駆使して強敵を倒すターン制コマンドバトルRPG。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
