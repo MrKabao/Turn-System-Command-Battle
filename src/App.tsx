@@ -17,7 +17,10 @@ import {
   Coins,
   ShoppingBag,
   ShieldCheck,
-  User
+  User,
+  HelpCircle,
+  Bug,
+  Wrench
 } from "lucide-react";
 
 import { Player, Enemy, LogEntry, MagicSpell, DamagePopup } from "./types";
@@ -49,22 +52,22 @@ const DIFFICULTIES: DifficultyConfig[] = [
     id: "Medium",
     jpName: "中級討伐作戦",
     description: "古代遺跡や洞窟深部。ワイバーンやオーガが徘徊する危険地域。ポーションや魔法攻撃の入念な準備が求められます。",
-    baseExpRange: "60",
-    baseGoldRange: "100",
+    baseExpRange: "110",
+    baseGoldRange: "180",
   },
   {
     id: "Hard",
     jpName: "上級討伐作戦",
     description: "王都廃城の深淵。闇を司る黒竜やキマイラが侵入者を阻む高難度エリア。強力な武具装備の調整を強く推奨します。",
-    baseExpRange: "120",
-    baseGoldRange: "240",
+    baseExpRange: "230",
+    baseGoldRange: "460",
   },
   {
     id: "Nightmare",
     jpName: "悪夢級作戦",
     description: "冥府外縁。獄魔アスモデウスや宇宙的邪神クトゥルフが支配する破滅の絶対領域。極限まで鍛え抜かれた戦士以外は不可踏。",
-    baseExpRange: "250",
-    baseGoldRange: "500",
+    baseExpRange: "500",
+    baseGoldRange: "1000",
   },
 ];
 
@@ -73,7 +76,12 @@ export default function App() {
   const [gameState, setGameState] = useState<"select-enemy" | "fighting" | "consecutive-choice" | "victory" | "defeat">("select-enemy");
   const [isMuted, setIsMuted] = useState(false);
   const [isResolvingTurn, setIsResolvingTurn] = useState(false);
-  const [lobbyTab, setLobbyTab] = useState<"battle" | "status" | "shop">("battle");
+  const [lobbyTab, setLobbyTab] = useState<"battle" | "status" | "shop" | "help">("battle");
+
+  // Debug system states
+  const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
+  const [isInvincible, setIsInvincible] = useState<boolean>(false);
+  const [isInstakill, setIsInstakill] = useState<boolean>(false);
 
   // Consecutive Run States
   const [currentRunDifficulty, setCurrentRunDifficulty] = useState<"Easy" | "Medium" | "Hard" | "Nightmare" | null>(null);
@@ -342,7 +350,15 @@ export default function App() {
     
     // Choose a random monster of this difficulty
     const candidates = MONSTERS.filter((m) => m.difficulty === difficulty);
-    const randomMonster = candidates[Math.floor(Math.random() * candidates.length)];
+    let randomMonster = candidates[Math.floor(Math.random() * candidates.length)];
+    
+    // プレイヤーのレベルが1の間は、初級討伐作戦(Easy)で最初の戦闘は必ずスライムが出現するようにする
+    if (player.level === 1 && difficulty === "Easy") {
+      const slimeMonster = candidates.find((m) => m.id === "slime");
+      if (slimeMonster) {
+        randomMonster = slimeMonster;
+      }
+    }
     
     // Initialize run parameters
     setCurrentRunDifficulty(difficulty);
@@ -389,8 +405,13 @@ export default function App() {
     const finalDamage = Math.max(8, baseDamage + variance);
 
     // Multiplier for Critical strike (15% chance)
-    const isCritical = Math.random() < 0.15;
-    const damageDealt = isCritical ? Math.floor(finalDamage * 1.5) : finalDamage;
+    const isCritical = (isDebugMode && isInstakill) ? true : Math.random() < 0.15;
+    let damageDealt = isCritical ? Math.floor(finalDamage * 1.5) : finalDamage;
+
+    // Apply debug instakill mode
+    if (isDebugMode && isInstakill) {
+      damageDealt = Math.max(99999, enemyHp);
+    }
 
     const remainingEnemyHp = Math.max(0, enemyHp - damageDealt);
     setEnemyHp(remainingEnemyHp);
@@ -431,7 +452,11 @@ export default function App() {
 
         const baseDmg1 = Math.floor(player.attack * 0.7) - Math.floor(currentEnemy.defense / 4);
         const variance1 = Math.floor(Math.random() * 5) - 2; // -2 to +2
-        const finalDmg1 = Math.max(8, baseDmg1 + variance1);
+        let finalDmg1 = Math.max(8, baseDmg1 + variance1);
+
+        if (isDebugMode && isInstakill) {
+          finalDmg1 = Math.max(99999, enemyHp);
+        }
 
         const hpAfterFirst = Math.max(0, enemyHp - finalDmg1);
         setEnemyHp(hpAfterFirst);
@@ -452,7 +477,11 @@ export default function App() {
 
           const baseDmg2 = Math.floor(player.attack * 0.7) - Math.floor(currentEnemy.defense / 4);
           const variance2 = Math.floor(Math.random() * 5) - 2;
-          const finalDmg2 = Math.max(8, baseDmg2 + variance2);
+          let finalDmg2 = Math.max(8, baseDmg2 + variance2);
+
+          if (isDebugMode && isInstakill) {
+            finalDmg2 = Math.max(99999, hpAfterFirst);
+          }
 
           const hpAfterSecond = Math.max(0, hpAfterFirst - finalDmg2);
           setEnemyHp(hpAfterSecond);
@@ -476,7 +505,11 @@ export default function App() {
         // Physical scale damage
         const baseDmg = Math.floor(player.attack * spell.power) - Math.floor(currentEnemy.defense / 2);
         const variance = Math.floor(Math.random() * 9) - 4; // -4 to +4
-        const finalDmg = Math.max(16, baseDmg + variance);
+        let finalDmg = Math.max(16, baseDmg + variance);
+
+        if (isDebugMode && isInstakill) {
+          finalDmg = Math.max(99999, enemyHp);
+        }
 
         const remainingHp = Math.max(0, enemyHp - finalDmg);
         setEnemyHp(remainingHp);
@@ -507,7 +540,10 @@ export default function App() {
           magDamage = Math.floor(player.magic * spell.power * randRatio);
         }
         
-        const finalDmg = Math.max(15, magDamage);
+        let finalDmg = Math.max(15, magDamage);
+        if (isDebugMode && isInstakill) {
+          finalDmg = Math.max(99999, enemyHp);
+        }
         const remainingHp = Math.max(0, enemyHp - finalDmg);
         setEnemyHp(remainingHp);
 
@@ -547,7 +583,10 @@ export default function App() {
         setIsEnemyHit(true);
 
         const barrierDmg = Math.floor(player.magic * 1.0) - Math.floor(currentEnemy.defense / 3);
-        const finalDmg = Math.max(10, barrierDmg);
+        let finalDmg = Math.max(10, barrierDmg);
+        if (isDebugMode && isInstakill) {
+          finalDmg = Math.max(99999, enemyHp);
+        }
         const drainHp = Math.min(player.maxHp - player.hp, 25);
 
         const remainingHp = Math.max(0, enemyHp - finalDmg);
@@ -602,7 +641,7 @@ export default function App() {
     );
 
     setTimeout(() => {
-      resolveEnemyTurn();
+      resolveEnemyTurn(true);
     }, 600);
   };
 
@@ -616,7 +655,7 @@ export default function App() {
   };
 
   // --- ENEMY ACTION RESOLUTION ---
-  const resolveEnemyTurn = () => {
+  const resolveEnemyTurn = (isDefendingThisTurn = false) => {
     // A brief delay to make the combat rhythmic
     setTimeout(() => {
       if (gameState === "defeat") return;
@@ -657,9 +696,15 @@ export default function App() {
       incomingDmg = Math.max(5, incomingDmg);
 
       // Apply defense reduction
-      if (player.isDefending) {
-        incomingDmg = Math.max(1, Math.floor(incomingDmg * 0.25)); // 75% reduced!
+      if (isDefendingThisTurn || player.isDefending) {
+        incomingDmg = Math.max(1, Math.floor(incomingDmg * 0.3)); // 70% reduced! (Original 30% damage)
         pushLog(`▶ プレイヤーはガッチリ防御している！ダメージを大幅にカットした！`, "player-defend");
+      }
+
+      // Apply debug invincible mode
+      if (isDebugMode && isInvincible) {
+        incomingDmg = 0;
+        pushLog(`🛡️【デバッグ無敵】 被ダメージを完全に無効化（0ダメージ）！`, "system");
       }
 
       const updatedPlayerHp = Math.max(0, player.hp - incomingDmg);
@@ -720,14 +765,14 @@ export default function App() {
     let expReward = 30;
     let goldReward = 40;
     if (currentRunDifficulty === "Medium") {
-      expReward = 60;
-      goldReward = 100;
+      expReward = 110;
+      goldReward = 180;
     } else if (currentRunDifficulty === "Hard") {
-      expReward = 120;
-      goldReward = 240;
+      expReward = 230;
+      goldReward = 460;
     } else if (currentRunDifficulty === "Nightmare") {
-      expReward = 250;
-      goldReward = 500;
+      expReward = 500;
+      goldReward = 1000;
     }
 
     const nextWins = consecutiveWins + 1;
@@ -849,6 +894,8 @@ export default function App() {
           ...prev,
           exp: currentExp,
           gold: prev.gold + finalGold,
+          hp: prev.maxHp, // Fully healed on retreat
+          mp: prev.maxMp, // Fully healed on retreat
         };
       }
     });
@@ -878,22 +925,72 @@ export default function App() {
     setAccumulatedBaseExp(0);
     setAccumulatedBaseGold(0);
     setCurrentRunDifficulty(null);
-  };
-
-  // Cheat recover helper for development sandbox testing
-  const devFullRevive = () => {
-    sounds.playHeal();
+    
+    // Fully heal player back to maximum when returning to selection/map
     setPlayer((prev) => ({
       ...prev,
       hp: prev.maxHp,
       mp: prev.maxMp,
     }));
-    setEnemyHp(currentEnemy.hp);
-    pushLog("【天の恩恵】 神秘的な祈りによりプレイヤー・エネミー全員が全回復した！", "system");
-    if (gameState === "defeat" || gameState === "victory") {
-      setGameState("fighting");
-      setIsResolvingTurn(false);
-    }
+  };
+
+  const debugLevelUp = () => {
+    sounds.playLevelUp();
+    setPlayer((prev) => {
+      const nextLevel = prev.level + 1;
+      const nextTargetExp = Math.floor(prev.nextLevelExp * 1.35);
+      const nextBaseAtk = prev.baseAttack + 3;
+      const nextBaseMag = prev.baseMagic + 4;
+      const nextBaseDef = prev.baseDefense + 2;
+      const nextMaxHp = prev.maxHp + 18;
+      const nextMaxMp = prev.maxMp + 6;
+
+      // Calculate totals with active equipment
+      const curWeapon = EQUIPMENT_ITEMS.find((w) => w.id === prev.equippedWeaponId);
+      const curArmor = EQUIPMENT_ITEMS.find((a) => a.id === prev.equippedArmorId);
+
+      const weaponAtk = curWeapon?.attackBonus || 0;
+      const weaponMag = curWeapon?.magicBonus || 0;
+      const weaponDef = curWeapon?.defenseBonus || 0;
+
+      const armorAtk = curArmor?.attackBonus || 0;
+      const armorMag = curArmor?.magicBonus || 0;
+      const armorDef = curArmor?.defenseBonus || 0;
+
+      const totalAtk = nextBaseAtk + weaponAtk + armorAtk;
+      const totalMag = nextBaseMag + weaponMag + armorMag;
+      const totalDef = nextBaseDef + weaponDef + armorDef;
+
+      pushLog(`🛠️【デバッグレベルアップ】 レベル ${nextLevel} になりました！`, "system");
+
+      return {
+        ...prev,
+        level: nextLevel,
+        nextLevelExp: nextTargetExp,
+        maxHp: nextMaxHp,
+        maxMp: nextMaxMp,
+        baseAttack: nextBaseAtk,
+        baseMagic: nextBaseMag,
+        baseDefense: nextBaseDef,
+        attack: totalAtk,
+        magic: totalMag,
+        defense: totalDef,
+        hp: nextMaxHp,
+        mp: nextMaxMp,
+      };
+    });
+  };
+
+  const debugAddGold = () => {
+    sounds.playTick();
+    setPlayer((prev) => {
+      const addedGold = 50000;
+      pushLog(`🛠️【デバッグゴールド付与】 +${addedGold} G 獲得！`, "system");
+      return {
+        ...prev,
+        gold: prev.gold + addedGold,
+      };
+    });
   };
 
   return (
@@ -918,6 +1015,24 @@ export default function App() {
 
         {/* UTILITY BAR Controls */}
         <div className="flex items-center gap-3" id="utility-bar">
+          {/* Debug Mode Switch Button */}
+          <button
+            onClick={() => {
+              sounds.playTick();
+              setIsDebugMode(!isDebugMode);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border text-[10px] font-mono uppercase tracking-wider transition-all cursor-pointer rounded-none font-bold ${
+              isDebugMode 
+                ? "bg-red-950/40 text-red-400 border-red-800 hover:bg-red-900/40" 
+                : "bg-zinc-950 text-zinc-550 border-zinc-900 hover:border-zinc-700 hover:text-zinc-300"
+            }`}
+            title="Toggle Debug Console // デバッグモード切替"
+            id="btn-debug-toggle"
+          >
+            <Bug className="w-3.5 h-3.5" />
+            <span>DEBUG: {isDebugMode ? "ON // 有効" : "OFF // 無効"}</span>
+          </button>
+
           {/* Mute Button */}
           <button
             onClick={() => setIsMuted(!isMuted)}
@@ -927,19 +1042,51 @@ export default function App() {
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4 text-zinc-300" />}
           </button>
-
-          {/* Dev/Reset Emergency Button */}
-          <button
-            onClick={devFullRevive}
-            className="px-3 py-2 bg-zinc-950 hover:bg-zinc-100 border border-zinc-850 hover:border-zinc-300 text-[10px] text-zinc-400 hover:text-zinc-950 cursor-pointer select-none font-mono flex items-center gap-1.5 transition-colors uppercase tracking-widest rounded-none"
-            title="Fully replenish stats"
-            id="btn-replenish"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Heal All // 全回復</span>
-          </button>
         </div>
       </header>
+
+      {/* GLOBAL DEBUG OVERLAY MATRIX PANEL */}
+      {isDebugMode && (
+        <div className="bg-red-950/20 border-b border-red-900/40 px-4 py-2.5 md:px-8 flex flex-wrap items-center justify-between gap-3 text-xs select-none z-10" id="global-debug-panel">
+          <div className="flex items-center gap-2 text-red-400 font-mono font-bold">
+            <span className="w-2 h-2 bg-red-500 rounded-full shrink-0" />
+            <span className="tracking-wide">DEBUG CHIPS ACTIVE // デバッグ特権介入システム</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-5">
+            {/* Invincible toggle */}
+            <label className="flex items-center gap-2 cursor-pointer font-mono font-bold text-xs select-none">
+              <input
+                type="checkbox"
+                checked={isInvincible}
+                onChange={() => {
+                  sounds.playTick();
+                  setIsInvincible(!isInvincible);
+                }}
+                className="w-3.5 h-3.5 accent-red-600 rounded-none cursor-pointer"
+              />
+              <span className={isInvincible ? "text-red-400 font-bold" : "text-zinc-500"}>
+                🛡️ 無敵化 (被ダメ0): {isInvincible ? "ENABLED // 有効" : "DISABLED // 無効"}
+              </span>
+            </label>
+
+            {/* Instakill toggle */}
+            <label className="flex items-center gap-2 cursor-pointer font-mono font-bold text-xs select-none">
+              <input
+                type="checkbox"
+                checked={isInstakill}
+                onChange={() => {
+                  sounds.playTick();
+                  setIsInstakill(!isInstakill);
+                }}
+                className="w-3.5 h-3.5 accent-red-600 rounded-none cursor-pointer"
+              />
+              <span className={isInstakill ? "text-red-450 font-bold" : "text-zinc-500"}>
+                💥 一撃必殺 (ワンパン): {isInstakill ? "ENABLED // 有効" : "DISABLED // 無効"}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* MAIN SCREEN GRID */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-2 md:py-3.5 flex flex-col justify-start gap-3 h-full z-10" id="main-viewport">
@@ -991,6 +1138,19 @@ export default function App() {
               >
                 <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
                 <span>GEAR_SHOP // 武具屋</span>
+              </button>
+
+              <button
+                onClick={() => { sounds.playTick(); setLobbyTab("help"); }}
+                className={`flex-1 sm:flex-initial py-2 px-3 sm:px-5 text-xs font-mono tracking-widest transition-all cursor-pointer uppercase flex items-center justify-center gap-1.5 border-b-2 shrink-0 ${
+                  lobbyTab === "help"
+                    ? "text-zinc-100 border-red-600 font-bold bg-zinc-900/35"
+                    : "text-zinc-500 hover:text-zinc-300 border-transparent hover:border-zinc-800"
+                }`}
+                id="tab-btn-help"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
+                <span>HELP // 遊び方</span>
               </button>
             </div>
 
@@ -1277,15 +1437,17 @@ export default function App() {
                     <div className="mt-6 border-t border-zinc-900 pt-5">
                       <span className="text-[10px] font-mono tracking-widest text-zinc-400 uppercase block mb-3 flex items-center justify-between">
                         <span>OWNED VAULT // 所持武具・予備装備</span>
-                        <span className="text-[8px] text-zinc-650 font-bold uppercase">{player.ownedItemIds.length} items</span>
+                        <span className="text-[8px] text-zinc-650 font-bold uppercase">
+                          {isDebugMode ? "ALL (DEBUG)" : `${player.ownedItemIds.length} items`}
+                        </span>
                       </span>
-                      {player.ownedItemIds.length === 0 ? (
+                      {!isDebugMode && player.ownedItemIds.length === 0 ? (
                         <p className="text-xs text-zinc-550 font-mono italic text-center py-4 border border-dashed border-zinc-900">
                           NO SPARE GEAR // 所持武具がありません（工廠で購入できます）
                         </p>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {EQUIPMENT_ITEMS.filter((item) => player.ownedItemIds.includes(item.id)).map((item) => {
+                          {EQUIPMENT_ITEMS.filter((item) => isDebugMode || player.ownedItemIds.includes(item.id)).map((item) => {
                             const isEquipped = player.equippedWeaponId === item.id || player.equippedArmorId === item.id;
                             return (
                               <div
@@ -1340,6 +1502,31 @@ export default function App() {
                   </p>
                 </div>
 
+                {/* DEBUG INSTANT ACTIONS PANEL */}
+                {isDebugMode && (
+                  <div className="bg-red-950/15 border border-red-900/40 p-4" id="debug-instant-shop-actions">
+                    <span className="text-[10px] font-mono tracking-[0.2em] text-red-400 font-bold uppercase block mb-2.5">
+                      🛠️ DEBUG SERVICES PANEL // デバッグチート端末
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        onClick={debugLevelUp}
+                        className="py-2.5 px-3 bg-red-950/40 hover:bg-red-900/40 border border-red-800 text-xs font-mono text-zinc-100 tracking-wider uppercase transition-all cursor-pointer font-bold rounded-none flex items-center justify-center gap-2"
+                      >
+                        <Wrench className="w-4 h-4 text-red-500" />
+                        <span>レベルを無条件に1上げる // LEVEL UP</span>
+                      </button>
+                      <button
+                        onClick={debugAddGold}
+                        className="py-2.5 px-3 bg-red-950/40 hover:bg-red-900/40 border border-red-800 text-xs font-mono text-zinc-100 tracking-wider uppercase transition-all cursor-pointer font-bold rounded-none flex items-center justify-center gap-2"
+                      >
+                        <Coins className="w-4 h-4 text-amber-500" />
+                        <span>ゴールド+50,000G付与 // ADD GOLD</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* WEAPONS SECTION */}
                   <div className="space-y-3">
@@ -1351,7 +1538,7 @@ export default function App() {
                     <div className="space-y-2">
                       {EQUIPMENT_ITEMS.filter((item) => item.type === "weapon").map((item) => {
                         const isEquipped = player.equippedWeaponId === item.id;
-                        const isOwned = player.ownedItemIds.includes(item.id);
+                        const isOwned = isDebugMode || player.ownedItemIds.includes(item.id);
                         const canAfford = player.gold >= item.cost;
                         return (
                           <div
@@ -1415,7 +1602,7 @@ export default function App() {
                     <div className="space-y-2">
                       {EQUIPMENT_ITEMS.filter((item) => item.type === "armor").map((item) => {
                         const isEquipped = player.equippedArmorId === item.id;
-                        const isOwned = player.ownedItemIds.includes(item.id);
+                        const isOwned = isDebugMode || player.ownedItemIds.includes(item.id);
                         const canAfford = player.gold >= item.cost;
                         return (
                           <div
@@ -1466,6 +1653,136 @@ export default function App() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: HELP & COMPENDIUM */}
+            {lobbyTab === "help" && (
+              <div className="space-y-6" id="help-and-compendium">
+                <div className="text-center mb-6">
+                  <span className="text-[10px] font-mono tracking-[0.25em] text-blue-400 font-bold uppercase block mb-1 animate-pulse">
+                    Tactical Operation Manual // 戦術指南・ヘルプ
+                  </span>
+                  <h3 className="text-xl font-light text-zinc-100 uppercase tracking-[0.1em]">
+                    各システムの詳細と戦闘指南
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto italic font-light">
+                    マトリクス戦術戦闘員の生存率を最大化するための基本情報。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  {/* 1. STATUSES AND MEANINGS */}
+                  <div className="border border-zinc-900 bg-zinc-950/70 p-5 rounded-none space-y-4">
+                    <h4 className="font-mono text-sm font-semibold tracking-wider text-zinc-100 border-b border-zinc-900 pb-2 flex items-center gap-2">
+                      <User className="w-4 h-4 text-zinc-400" />
+                      <span>01. ステータスとその意味について</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light leading-relaxed">
+                      <div className="space-y-1.5 p-3 bg-zinc-900/40 border border-zinc-900/50">
+                        <div className="font-bold text-zinc-300 font-mono flex items-center justify-between">
+                          <span>HP (体力値)</span>
+                          <span className="text-[10px] text-zinc-500">HEALTH_POINTS</span>
+                        </div>
+                        <p className="text-zinc-400">
+                          プレイヤーの生命力。これが 0 になると作戦失敗（敗北）となり、現在挑戦中の連戦で溜まっていた全ての蓄積報酬が完全に消失(ロスト)します。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-zinc-900/40 border border-zinc-900/50">
+                        <div className="font-bold text-zinc-300 font-mono flex items-center justify-between">
+                          <span>MP (魔力値)</span>
+                          <span className="text-[10px] text-zinc-500">MAGIC_POINTS</span>
+                        </div>
+                        <p className="text-zinc-400">
+                          強力な物理スキルや魔導呪文の詠唱（使用）に要求される魔力のエネルギーです。自身の魔力量と相談しながら強力な技を繰り出しましょう。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-zinc-900/40 border border-zinc-900/50">
+                        <div className="font-bold text-zinc-300 font-mono flex items-center justify-between">
+                          <span>攻撃力 (ATK)</span>
+                          <span className="text-[10px] text-zinc-500">PHYSICAL_STRENGTH</span>
+                        </div>
+                        <p className="text-zinc-400">
+                          通常物理攻撃ダメージ、および「二連斬り」「破兜撃」などの物理カテゴリに属する習得スキルの最大攻撃ダメージ威力を補正・増強します。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-zinc-900/40 border border-zinc-900/50">
+                        <div className="font-bold text-zinc-300 font-mono flex items-center justify-between">
+                          <span>魔力 (MAG)</span>
+                          <span className="text-[10px] text-zinc-500">SORCERY_POWER</span>
+                        </div>
+                        <p className="text-zinc-400">
+                          「烈火の球」「迅雷の撃」などの攻撃呪文パワーに加え、「聖なる福音」による回復量、および特殊障壁などの効力を一元的に高める能力値です。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-zinc-900/40 border border-zinc-900/50 md:col-span-2">
+                        <div className="font-bold text-zinc-300 font-mono flex items-center justify-between">
+                          <span>防御力 (DEF)</span>
+                          <span className="text-[10px] text-zinc-500">ARMOR_SHIELDING</span>
+                        </div>
+                        <p className="text-zinc-400">
+                          敵から繰り広げられる様々な攻撃、バースト呪文などの被ダメージ値を強力にシャットアウト・軽減します。防御力の上昇は厳しい連戦での生存率に直結します。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. EQUIPMENT GUIDE */}
+                  <div className="border border-zinc-900 bg-zinc-950/70 p-5 rounded-none space-y-3">
+                    <h4 className="font-mono text-sm font-semibold tracking-wider text-zinc-100 border-b border-zinc-900 pb-2 flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4 text-amber-500" />
+                      <span>02. 武具について</span>
+                    </h4>
+                    <div className="space-y-2 text-xs font-light leading-relaxed text-zinc-400">
+                      <p>
+                        ・武器を装備することで**物理攻撃力**や**魔導魔力**が上昇します。防具を装備することでプレイヤーの**防御耐性能力値**が飛躍的に守護されます。
+                      </p>
+                      <p>
+                        ・作戦任務中（戦闘時以外）には、いつでも基地の「**GEAR_SHOP // 武具屋**」で貯めたゴールドを用いて、より高度に鍛え上げられた武具を購入し、自動的に即座に装備することができます。
+                      </p>
+                      <p>
+                        ・武具は一度購入すれば永続的にプレイヤーの所有物となります。レベルアップ時にも装備品のステータス増加能力は合計値として適切に上乗せされ、戦闘補正値として正しく作用し続けます。
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3. CONSECUTIVE BATTLE SYSTEM */}
+                  <div className="border border-zinc-900 bg-zinc-950/70 p-5 rounded-none space-y-4">
+                    <h4 className="font-mono text-sm font-semibold tracking-wider text-zinc-100 border-b border-zinc-900 pb-2 flex items-center gap-2">
+                      <Swords className="w-4 h-4 text-red-500" />
+                      <span>03. 連戦システムについて</span>
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-light leading-relaxed">
+                      <div className="space-y-1.5 p-3 bg-red-950/10 border border-red-500/10">
+                        <h5 className="font-bold text-red-400 font-mono">🔥 連勝による報酬倍率アップ</h5>
+                        <p className="text-zinc-400">
+                          討伐完了時、次の標的に休まず連続で挑む「連戦継続」を行うと、討伐累積報酬（EXP、ゴールド）に適用される倍率ボーナスが **最大7.0倍（さらにそれ以上）** へと飛躍的にアップします。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-emerald-950/15 border border-emerald-500/15">
+                        <h5 className="font-bold text-emerald-400 font-mono">👑 撤退による安全な報酬回収</h5>
+                        <p className="text-zinc-400">
+                          戦闘が終了したインターバル時に「**SECURE RETREAT // 撤退して全報酬を獲得**」を選択することで、それまでに蓄積された基本報酬に連勝倍率を掛け合わせた経験値とゴールドを、すべて安全に持ち帰り回収することができます。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5 p-3 bg-zinc-900/60 border border-zinc-850 sm:col-span-2">
+                        <h5 className="font-bold text-zinc-300 font-mono">⚠️ 敗北による完全ロストと生還の恩恵</h5>
+                        <p className="text-zinc-400">
+                          ・連戦中に体力が 0 になり敗北した場合、その作戦内で蓄積されていた全ての獲得予定報酬（経験値・資金）は **完全にロスト（消失）** し、手元に残りません。
+                        </p>
+                        <p className="text-zinc-400 mt-1">
+                          ・ただし、安全に撤退を選択し無事基地へと帰還した際には、過酷な闘いで負った傷が全て癒え、**プレイヤーの体力(HP)および魔力(MP)がすべて最大まで自動的に全回復**する恩恵を得ることが可能です！
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
